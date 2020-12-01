@@ -1,5 +1,6 @@
 {
     "logLevel": "Trace",
+    "updateIntervalM": 15,
     "servers": {
         "00000000000001": {
             "ownerId": 00000000000001,
