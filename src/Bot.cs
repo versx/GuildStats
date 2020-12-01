@@ -3,6 +3,7 @@
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Timers;
     using System.Threading.Tasks;
 
     using GuildStats.Configuration;
@@ -18,6 +19,7 @@
 
         private readonly Dictionary<ulong, DiscordClient> _servers;
         private readonly Config _whConfig;
+        private readonly Timer _timer;
 
         private static readonly IEventLogger _logger = EventLogger.GetLogger("BOT");
 
@@ -34,6 +36,8 @@
             _logger.Trace($"WhConfig [Servers={whConfig.Servers.Count}]");
             _servers = new Dictionary<ulong, DiscordClient>();
             _whConfig = whConfig;
+            _timer = new Timer { Interval = 60 * 1000 * _whConfig.UpdateIntervalM };
+            _timer.Elapsed += OnTimerElapsed;
 
             // Set unhandled exception event handler
             AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
@@ -86,6 +90,24 @@
 
                 // Wait 3 seconds between initializing Discord clients
                 Task.Delay(3000).GetAwaiter().GetResult();
+                // Start update timer
+                _timer.Start();
+            }
+        }
+
+        private async void OnTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            foreach (var server in _servers.Values)
+            {
+                foreach (var guild in server.Guilds.Values)
+                {
+                    if (!_whConfig.Servers.ContainsKey(guild.Id))
+                        continue;
+
+                    await UpdateGuildStats(guild);
+                    // Wait 5 seconds per guild
+                    System.Threading.Thread.Sleep(5000);
+                }
             }
         }
 
@@ -165,23 +187,20 @@
         private async Task Client_GuildAvailable(GuildCreateEventArgs e)
         {
             // If guild is in configured servers list then attempt to create emojis needed
-            if (_whConfig.Servers.ContainsKey(e.Guild.Id))
+            if (!_whConfig.Servers.ContainsKey(e.Guild.Id))
+                return;
+
+            await UpdateGuildStats(e.Guild);
+
+            if (!(e.Client is DiscordClient client))
             {
-                await UpdateGuildStats(e.Guild);
-
-                if (!(e.Client is DiscordClient client))
-                {
-                    _logger.Error($"DiscordClient is null, Unable to update status.");
-                    return;
-                }
-
-                // Set custom bot status if guild is in config server list
-                if (_whConfig.Servers.ContainsKey(e.Guild.Id))
-                {
-                    var status = _whConfig.Servers[e.Guild.Id].Status;
-                    await client.UpdateStatusAsync(new DiscordGame(status ?? $"v{Strings.Version}"), UserStatus.Online);
-                }
+                _logger.Error($"DiscordClient is null, Unable to update status.");
+                return;
             }
+
+            // Set custom bot status if guild is in config server list
+            var status = _whConfig.Servers[e.Guild.Id].Status;
+            await client.UpdateStatusAsync(new DiscordGame(status ?? $"v{Strings.Version}"), UserStatus.Online);
         }
 
         private async Task Client_ClientErrored(ClientErrorEventArgs e)
