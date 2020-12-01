@@ -284,6 +284,45 @@
             await botCountChannel.ModifyAsync($"Bot Count: {guild.Members.Where(x => x.IsBot).ToList().Count:N0}");
             await roleCountChannel.ModifyAsync($"Role Count: {guild.Roles.Count:N0}");
             await channelCountChannel.ModifyAsync($"Channel Count: {guild.Channels.Count}");
+
+            foreach (var item in server.MemberRoles)
+            {
+                var roleChannelId = item.Key;
+                var roleId = item.Value;
+                var roleChannel = guild.GetChannel(roleChannelId);
+                if (roleChannel == null)
+                {
+                    _logger.Error($"Failed to find role channel with id {roleChannelId}");
+                    continue;
+                }
+                var role = guild.GetRole(roleId);
+                if (role == null)
+                {
+                    _logger.Error($"Failed to find role with id {roleId}");
+                    continue;
+                }
+                var roleCount = GetMemberRoleCount(role.Id, guild.Members.ToList());
+                await roleChannel.ModifyAsync($"{role.Name} Role Count: {roleCount}");
+            }
+        }
+
+        private int GetMemberRoleCount(ulong roleId, List<DiscordMember> members)
+        {
+            var count = 0;
+            try
+            {
+                members.ForEach(x =>
+                {
+                    var roleIds = x.Roles.Select(role => role.Id);
+                    if (roleIds.Contains(roleId))
+                        count++;
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex);
+            }
+            return count;
         }
 
         private async void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
