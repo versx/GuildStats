@@ -9,7 +9,10 @@
             "roleCountChannelId": 00000000000001,
             "channelCountChannelId": 00000000000001,
             "memberRoles": {
-                00000000000001: 00000000000001
+                00000000000001: {
+                    "roleIds": [00000000000001],
+                    "text": "Supporters"
+                }
             },
             "token": "<DISCORD_BOT_TOKEN>",
             "status": null

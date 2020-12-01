@@ -283,26 +283,30 @@
             await memberCountChannel.ModifyAsync($"Member Count: {guild.MemberCount:N0}");
             await botCountChannel.ModifyAsync($"Bot Count: {guild.Members.Where(x => x.IsBot).ToList().Count:N0}");
             await roleCountChannel.ModifyAsync($"Role Count: {guild.Roles.Count:N0}");
-            await channelCountChannel.ModifyAsync($"Channel Count: {guild.Channels.Count}");
+            await channelCountChannel.ModifyAsync($"Channel Count: {guild.Channels.Count:N0}");
 
             foreach (var item in server.MemberRoles)
             {
                 var roleChannelId = item.Key;
-                var roleId = item.Value;
+                var roleConfig = item.Value;
                 var roleChannel = guild.GetChannel(roleChannelId);
                 if (roleChannel == null)
                 {
                     _logger.Error($"Failed to find role channel with id {roleChannelId}");
                     continue;
                 }
-                var role = guild.GetRole(roleId);
-                if (role == null)
+                var total = 0;
+                foreach (var roleId in roleConfig.RoleIds)
                 {
-                    _logger.Error($"Failed to find role with id {roleId}");
-                    continue;
+                    var role = guild.GetRole(roleId);
+                    if (role == null)
+                    {
+                        _logger.Error($"Failed to find role with id {roleId}");
+                        continue;
+                    }
+                    total += GetMemberRoleCount(role.Id, guild.Members.ToList());
                 }
-                var roleCount = GetMemberRoleCount(role.Id, guild.Members.ToList());
-                await roleChannel.ModifyAsync($"{role.Name} Role Count: {roleCount}");
+                await roleChannel.ModifyAsync($"{roleConfig.Text}: {total:N0}");
             }
         }
 
