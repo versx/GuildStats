@@ -114,7 +114,7 @@
                 await Task.Delay(1000);
             }
 
-            _logger.Info("WebhookManager is running...");
+            _logger.Info("GuildStats is running...");
         }
 
         /// <summary>
