@@ -22,6 +22,12 @@
         public Dictionary<ulong, DiscordGuildConfig> Servers { get; set; }
 
         /// <summary>
+        /// Gets or sets the interval of how frequent to update the guild stats
+        /// </summary>
+        [JsonProperty("updateIntervalM")]
+        public int UpdateIntervalM { get; set; }
+
+        /// <summary>
         /// Gets or sets the event logging level to set
         /// </summary>
         [JsonProperty("logLevel")]
@@ -40,6 +46,7 @@
         {
             LogLevel = LogLevel.Trace;
             Servers = new Dictionary<ulong, DiscordGuildConfig>();
+            UpdateIntervalM = 10;
         }
 
         /// <summary>

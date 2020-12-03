@@ -1,15 +1,22 @@
 {
     "logLevel": "Trace",
+    "updateIntervalM": 15,
     "servers": {
-	    "00000000000001": {
-		    "ownerId": 00000000000001,
-		    "guildId": 00000000000001,
-			"memberCountChannelId": 00000000000001,
-			"botCountChannelId": 00000000000001,
-			"roleCountChannelId": 00000000000001,
-			"channelCountChannelId": 00000000000001,
-		    "token": "<DISCORD_BOT_TOKEN>",
-			"status": null
-		}
-	}
+        "00000000000001": {
+            "ownerId": 00000000000001,
+            "guildId": 00000000000001,
+            "memberCountChannelId": 00000000000001,
+            "botCountChannelId": 00000000000001,
+            "roleCountChannelId": 00000000000001,
+            "channelCountChannelId": 00000000000001,
+            "memberRoles": {
+                "00000000000001": {
+                    "roleIds": [00000000000001],
+                    "text": "Supporters"
+                }
+            },
+            "token": "<DISCORD_BOT_TOKEN>",
+            "status": null
+        }
+    }
 }
