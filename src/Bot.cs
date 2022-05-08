@@ -204,7 +204,7 @@
 
             await UpdateGuildStats(e.Guild);
 
-            if (!(sender is DiscordClient client))
+            if (sender is not DiscordClient client)
             {
                 _logger.Error($"DiscordClient is null, Unable to update status.");
                 return;
@@ -288,7 +288,7 @@
             }
         }
 
-        private int GetMemberRoleCount(ulong roleId, List<DiscordMember> members)
+        private static int GetMemberRoleCount(ulong roleId, List<DiscordMember> members)
         {
             var count = 0;
             try

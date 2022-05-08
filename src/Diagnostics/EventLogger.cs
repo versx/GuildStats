@@ -3,6 +3,7 @@
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Threading;
 
     /// <summary>
     /// Event logger diagnostics class
@@ -13,9 +14,9 @@
 
         #region Static Variables
 
-        private static readonly Dictionary<string, EventLogger> _instances = new Dictionary<string, EventLogger>();
+        private static readonly Dictionary<string, EventLogger> _instances = new();
 #if Windows
-        private static readonly EventWaitHandle _waitHandle = new EventWaitHandle(true, EventResetMode.AutoReset, Strings.BotName + new Random().Next(10000, 90000));
+        private static readonly EventWaitHandle _waitHandle = new(true, EventResetMode.AutoReset, Strings.BotName + new Random().Next(10000, 90000));
 #endif
 
 #endregion
