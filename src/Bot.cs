@@ -50,12 +50,23 @@
                 var server = _whConfig.Servers[guildId];
                 var client = new DiscordClient(new DiscordConfiguration
                 {
-                    AutomaticGuildSync = true,
                     AutoReconnect = true,
-                    EnableCompression = true,
-                    Token = server.Token,
+                    AlwaysCacheMembers = true,
+                    // REVIEW: Hmm maybe we should compress the whole stream instead of just payload.
+                    GatewayCompressionLevel = GatewayCompressionLevel.Payload,
+                    Token = server?.Token,
                     TokenType = TokenType.Bot,
-                    UseInternalLogHandler = true
+                    MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Debug, // TODO: _whConfig.LogLevel,
+                    Intents = DiscordIntents.DirectMessages
+                    | DiscordIntents.DirectMessageTyping
+                    | DiscordIntents.GuildEmojis
+                    | DiscordIntents.GuildMembers
+                    | DiscordIntents.GuildMessages
+                    | DiscordIntents.GuildMessageTyping
+                    | DiscordIntents.GuildPresences
+                    | DiscordIntents.Guilds
+                    | DiscordIntents.GuildWebhooks,
+                    ReconnectIndefinitely = true,
                 });
 
                 // If you are on Windows 7 and using .NETFX, install 
@@ -79,8 +90,8 @@
                 client.Ready += Client_Ready;
                 client.GuildAvailable += Client_GuildAvailable;
                 //_client.MessageCreated += Client_MessageCreated;
-                client.ClientErrored += Client_ClientErrored;
-                client.DebugLogger.LogMessageReceived += DebugLogger_LogMessageReceived;
+                client.ClientErrored += Client_ClientErrored1;
+                //client.DebugLogger.LogMessageReceived += DebugLogger_LogMessageReceived;
 
                 _logger.Info($"Configured Discord server {guildId}");
                 if (!_servers.ContainsKey(guildId))
@@ -167,24 +178,25 @@
 
         #region Discord Events
 
-        private Task Client_Ready(ReadyEventArgs e)
+        private Task Client_Ready(DiscordClient sender, ReadyEventArgs e)
         {
             _logger.Info($"------------------------------------------");
             _logger.Info($"[DISCORD] Connected.");
             _logger.Info($"[DISCORD] ----- Current Application");
-            _logger.Info($"[DISCORD] Name: {e.Client.CurrentApplication.Name}");
-            _logger.Info($"[DISCORD] Description: {e.Client.CurrentApplication.Description}");
-            _logger.Info($"[DISCORD] Owner: {e.Client.CurrentApplication.Owner.Username}#{e.Client.CurrentApplication.Owner.Discriminator}");
+            _logger.Info($"[DISCORD] Name: {sender.CurrentApplication.Name}");
+            _logger.Info($"[DISCORD] Description: {sender.CurrentApplication.Description}");
+            var owner = sender.CurrentApplication.Owners.FirstOrDefault();
+            _logger.Info($"[DISCORD] Owner: {owner?.Username}#{owner?.Discriminator}");
             _logger.Info($"[DISCORD] ----- Current User");
-            _logger.Info($"[DISCORD] Id: {e.Client.CurrentUser.Id}");
-            _logger.Info($"[DISCORD] Name: {e.Client.CurrentUser.Username}#{e.Client.CurrentUser.Discriminator}");
-            _logger.Info($"[DISCORD] Email: {e.Client.CurrentUser.Email}");
+            _logger.Info($"[DISCORD] Id: {sender.CurrentUser.Id}");
+            _logger.Info($"[DISCORD] Name: {sender.CurrentUser.Username}#{sender.CurrentUser.Discriminator}");
+            _logger.Info($"[DISCORD] Email: {sender.CurrentUser.Email}");
             _logger.Info($"------------------------------------------");
 
             return Task.CompletedTask;
         }
 
-        private async Task Client_GuildAvailable(GuildCreateEventArgs e)
+        private async Task Client_GuildAvailable(DiscordClient sender, GuildCreateEventArgs e)
         {
             // If guild is in configured servers list then attempt to create emojis needed
             if (!_whConfig.Servers.ContainsKey(e.Guild.Id))
@@ -192,7 +204,7 @@
 
             await UpdateGuildStats(e.Guild);
 
-            if (!(e.Client is DiscordClient client))
+            if (!(sender is DiscordClient client))
             {
                 _logger.Error($"DiscordClient is null, Unable to update status.");
                 return;
@@ -200,68 +212,14 @@
 
             // Set custom bot status if guild is in config server list
             var status = _whConfig.Servers[e.Guild.Id].Status;
-            await client.UpdateStatusAsync(new DiscordGame(status ?? $"v{Strings.Version}"), UserStatus.Online);
+            await client.UpdateStatusAsync(new DiscordActivity(status ?? $"v{Strings.Version}"), UserStatus.Online);
         }
 
-        private async Task Client_ClientErrored(ClientErrorEventArgs e)
+        private async Task Client_ClientErrored1(DiscordClient sender, ClientErrorEventArgs e)
         {
             _logger.Error(e.Exception);
 
             await Task.CompletedTask;
-        }
-
-        private void DebugLogger_LogMessageReceived(object sender, DebugLogMessageEventArgs e)
-        {
-            if (e.Application == "REST")
-            {
-                _logger.Error("[DISCORD] RATE LIMITED-----------------");
-                return;
-            }
-
-            //Color
-            ConsoleColor color;
-            switch (e.Level)
-            {
-                case DSharpPlus.LogLevel.Error: color = ConsoleColor.DarkRed; break;
-                case DSharpPlus.LogLevel.Warning: color = ConsoleColor.Yellow; break;
-                case DSharpPlus.LogLevel.Info: color = ConsoleColor.White; break;
-                case DSharpPlus.LogLevel.Critical: color = ConsoleColor.Red; break;
-                case DSharpPlus.LogLevel.Debug: default: color = ConsoleColor.DarkGray; break;
-            }
-
-            //Source
-            var sourceName = e.Application;
-
-            //Text
-            var text = e.Message;
-
-            //Build message
-            var builder = new System.Text.StringBuilder(text.Length + (sourceName?.Length ?? 0) + 5);
-            if (sourceName != null)
-            {
-                builder.Append('[');
-                builder.Append(sourceName);
-                builder.Append("] ");
-            }
-
-            for (var i = 0; i < text.Length; i++)
-            {
-                //Strip control chars
-                var c = text[i];
-                if (!char.IsControl(c))
-                    builder.Append(c);
-            }
-
-            if (text != null)
-            {
-                builder.Append(": ");
-                builder.Append(text);
-            }
-
-            text = builder.ToString();
-            Console.ForegroundColor = color;
-            Console.WriteLine(text);
-            Console.ResetColor();
         }
 
         #endregion
@@ -299,10 +257,11 @@
                 return;
             }
 
-            await memberCountChannel.ModifyAsync($"Member Count: {guild.MemberCount:N0}");
-            await botCountChannel.ModifyAsync($"Bot Count: {guild.Members.Where(x => x.IsBot).ToList().Count:N0}");
-            await roleCountChannel.ModifyAsync($"Role Count: {guild.Roles.Count:N0}");
-            await channelCountChannel.ModifyAsync($"Channel Count: {guild.Channels.Count:N0}");
+            await memberCountChannel.ModifyAsync(action => action.Topic = $"Member Count: {guild.MemberCount:N0}" );
+            await memberCountChannel.ModifyAsync(action => action.Topic = $"Bot Count: {guild.Members.Where(x => x.Value.IsBot).ToList():N0}");
+            await memberCountChannel.ModifyAsync(action => action.Topic = $"Role Count: {guild.Roles.Count:N0}");
+            await memberCountChannel.ModifyAsync(action => action.Topic = $"Channel Count: {guild.Channels.Count:N0}");
+            await memberCountChannel.ModifyAsync(action => action.Topic = $"Member Count: {guild.MemberCount:N0}");
 
             foreach (var item in server.MemberRoles)
             {
@@ -323,9 +282,9 @@
                         _logger.Error($"Failed to find role with id {roleId}");
                         continue;
                     }
-                    total += GetMemberRoleCount(role.Id, guild.Members.ToList());
+                    total += GetMemberRoleCount(role.Id, guild.Members.Values.ToList());
                 }
-                await roleChannel.ModifyAsync($"{roleConfig.Text}: {total:N0}");
+                await roleChannel.ModifyAsync(action => action.Topic = $"{roleConfig.Text}: {total:N0}");
             }
         }
 
