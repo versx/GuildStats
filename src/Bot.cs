@@ -43,18 +43,21 @@
             AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
 
             // Create a DiscordClient object per Discord server in config
-            var keys = _whConfig.Servers.Keys.ToList();
-            for (var i = 0; i < keys.Count; i++)
+            foreach (var (guildId, guildConfig) in _whConfig.Servers)
             {
-                var guildId = keys[i];
-                var server = _whConfig.Servers[guildId];
+                if (string.IsNullOrEmpty(guildConfig.Token))
+                {
+                    _logger.Error($"Bot token for guild {guildId} cannot be empty and must be set, skipping guild.");
+                    continue;
+                }
+
                 var client = new DiscordClient(new DiscordConfiguration
                 {
                     AutoReconnect = true,
                     AlwaysCacheMembers = true,
                     // REVIEW: Hmm maybe we should compress the whole stream instead of just payload.
                     GatewayCompressionLevel = GatewayCompressionLevel.Payload,
-                    Token = server?.Token,
+                    Token = guildConfig?.Token,
                     TokenType = TokenType.Bot,
                     MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Debug, // TODO: _whConfig.LogLevel,
                     Intents = DiscordIntents.DirectMessages
@@ -90,7 +93,7 @@
                 client.Ready += Client_Ready;
                 client.GuildAvailable += Client_GuildAvailable;
                 //_client.MessageCreated += Client_MessageCreated;
-                client.ClientErrored += Client_ClientErrored1;
+                client.ClientErrored += Client_ClientErrored;
                 //client.DebugLogger.LogMessageReceived += DebugLogger_LogMessageReceived;
 
                 _logger.Info($"Configured Discord server {guildId}");
@@ -202,8 +205,6 @@
             if (!_whConfig.Servers.ContainsKey(e.Guild.Id))
                 return;
 
-            await UpdateGuildStats(e.Guild);
-
             if (sender is not DiscordClient client)
             {
                 _logger.Error($"DiscordClient is null, Unable to update status.");
@@ -213,9 +214,13 @@
             // Set custom bot status if guild is in config server list
             var status = _whConfig.Servers[e.Guild.Id].Status;
             await client.UpdateStatusAsync(new DiscordActivity(status ?? $"v{Strings.Version}"), UserStatus.Online);
+
+            _logger.Debug($"Updating guild statistics for channels");
+
+            await UpdateGuildStats(e.Guild);
         }
 
-        private async Task Client_ClientErrored1(DiscordClient sender, ClientErrorEventArgs e)
+        private async Task Client_ClientErrored(DiscordClient sender, ClientErrorEventArgs e)
         {
             _logger.Error(e.Exception);
 
@@ -232,47 +237,21 @@
                 return;
 
             var server = _whConfig.Servers[guild.Id];
-            var memberCountChannel = guild.GetChannel(server.MemberCountChannelId);
-            if (memberCountChannel == null)
-            {
-                _logger.Error($"Failed to find member count channel with id {server.MemberCountChannelId}");
-                return;
-            }
-            var botCountChannel = guild.GetChannel(server.BotCountChannelId);
-            if (botCountChannel == null)
-            {
-                _logger.Error($"Failed to find bot count channel with id {server.BotCountChannelId}");
-                return;
-            }
-            var roleCountChannel = guild.GetChannel(server.RoleCountChannelId);
-            if (roleCountChannel == null)
-            {
-                _logger.Error($"Failed to find role count channel with id {server.RoleCountChannelId}");
-                return;
-            }
-            var channelCountChannel = guild.GetChannel(server.ChannelCountChannelId);
-            if (channelCountChannel == null)
-            {
-                _logger.Error($"Failed to find channel count channel with id {server.ChannelCountChannelId}");
-                return;
-            }
 
-            await memberCountChannel.ModifyAsync(action => action.Topic = $"Member Count: {guild.MemberCount:N0}" );
-            await memberCountChannel.ModifyAsync(action => action.Topic = $"Bot Count: {guild.Members.Where(x => x.Value.IsBot).ToList():N0}");
-            await memberCountChannel.ModifyAsync(action => action.Topic = $"Role Count: {guild.Roles.Count:N0}");
-            await memberCountChannel.ModifyAsync(action => action.Topic = $"Channel Count: {guild.Channels.Count:N0}");
-            await memberCountChannel.ModifyAsync(action => action.Topic = $"Member Count: {guild.MemberCount:N0}");
+            await UpdateChannelName(guild, server.MemberCountChannelId, $"Member Count: {guild.MemberCount:N0}");
+            await UpdateChannelName(guild, server.BotCountChannelId, $"Bot Count: {guild.Members.Where(x => x.Value.IsBot).ToList().Count:N0}");
+            await UpdateChannelName(guild, server.RoleCountChannelId, $"Role Count: {guild.Roles.Count:N0}");
+            await UpdateChannelName(guild, server.ChannelCountChannelId, $"Channel Count: {guild.Channels.Count:N0}");
 
-            foreach (var item in server.MemberRoles)
+            foreach (var (roleChannelId, roleConfig) in server.MemberRoles)
             {
-                var roleChannelId = item.Key;
-                var roleConfig = item.Value;
                 var roleChannel = guild.GetChannel(roleChannelId);
                 if (roleChannel == null)
                 {
                     _logger.Error($"Failed to find role channel with id {roleChannelId}");
                     continue;
                 }
+
                 var total = 0;
                 foreach (var roleId in roleConfig.RoleIds)
                 {
@@ -283,28 +262,46 @@
                         continue;
                     }
                     total += GetMemberRoleCount(role.Id, guild.Members.Values.ToList());
+                    System.Threading.Thread.Sleep(500);
                 }
-                await roleChannel.ModifyAsync(action => action.Topic = $"{roleConfig.Text}: {total:N0}");
+
+                await roleChannel.ModifyAsync(action => action.Name = $"{roleConfig.Text}: {total:N0}");
+                System.Threading.Thread.Sleep(500);
             }
+
+            // Wait 2 seconds per guild
+            System.Threading.Thread.Sleep(2000);
+        }
+
+        private static async Task UpdateChannelName(DiscordGuild guild, ulong channelId, string newName)
+        {
+            var channel = guild.GetChannel(channelId);
+            if (channel == null)
+            {
+                _logger.Error($"Failed to find channel with id {channelId}");
+                return;
+            }
+
+            _logger.Debug($"Updating channel: {channelId}");
+            await channel.ModifyAsync(action => action.Name = newName);
+
+            // Wait half a second between updating channel names
+            System.Threading.Thread.Sleep(500);
         }
 
         private static int GetMemberRoleCount(ulong roleId, List<DiscordMember> members)
         {
-            var count = 0;
             try
             {
-                members.ForEach(x =>
-                {
-                    var roleIds = x.Roles.Select(role => role.Id);
-                    if (roleIds.Contains(roleId))
-                        count++;
-                });
+                var count = members.Count(x => x.Roles.Select(role => role.Id)
+                                                      .Contains(roleId));
+                return count;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex);
+                return 0;
             }
-            return count;
         }
 
         private async void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
@@ -312,37 +309,42 @@
             _logger.Debug("Unhandled exception caught.");
             _logger.Error((Exception)e.ExceptionObject);
 
-            if (e.IsTerminating)
+            if (!e.IsTerminating)
+                return;
+
+            foreach (var (guildId, guildConfig) in _whConfig.Servers)
             {
-                var keys = _whConfig.Servers.Keys.ToList();
-                for (var i = 0; i < keys.Count; i++)
+                if (!_whConfig.Servers.ContainsKey(guildId))
                 {
-                    var guildId = keys[i];
-                    if (!_whConfig.Servers.ContainsKey(guildId))
-                    {
-                        _logger.Error($"Unable to find guild id {guildId} in server config list.");
-                        continue;
-                    }
-                    var server = _whConfig.Servers[guildId];
-
-                    if (!_servers.ContainsKey(guildId))
-                    {
-                        _logger.Error($"Unable to find guild id {guildId} in Discord server client list.");
-                        continue;
-                    }
-                    var client = _servers[guildId];
-                    if (client != null)
-                    {
-                        var owner = await client.GetUserAsync(server.OwnerId);
-                        if (owner == null)
-                        {
-                            _logger.Warn($"Unable to get owner from id {server.OwnerId}.");
-                            return;
-                        }
-
-                        // TODO: await client.SendDirectMessage(owner, Strings.CrashMessage, null);
-                    }
+                    _logger.Error($"Unable to find guild id {guildId} in server config list.");
+                    continue;
                 }
+
+                if (!_servers.ContainsKey(guildId))
+                {
+                    _logger.Error($"Unable to find guild id {guildId} in Discord server client list.");
+                    continue;
+                }
+                var client = _servers[guildId];
+                if (client == null)
+                    continue;
+
+                if (!client.Guilds.ContainsKey(guildId))
+                {
+                    _logger.Error($"Unable to find guild id {guildId} in Discord client guilds list that should have it.");
+                    continue;
+                }
+                var guild = client.Guilds[guildId];
+
+                var owner = await guild.GetMemberAsync(guildConfig.OwnerId);
+                if (owner == null)
+                {
+                    _logger.Warn($"Unable to find owner with id {guildConfig.OwnerId}.");
+                    continue;
+                }
+
+                // Send crash message to guild owner
+                await owner.SendMessageAsync(Strings.CrashMessage);
             }
         }
 
