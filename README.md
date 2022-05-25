@@ -25,3 +25,13 @@ Displays Discord server statistics for members, bots, roles, and channel count. 
 
 ## Preview  
 ![Image Preview](example.png)  
+
+## Notes  
+**Valid Log Levels:**  
+* Trace: 0
+* Debug: 1
+* Info: 2
+* Warning: 3
+* Error: 4
+* Critical: 5
+* None: 6
