@@ -4,6 +4,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using System.Timers;
+    using Thread = System.Threading.Thread;
     using System.Threading.Tasks;
 
     using GuildStats.Configuration;
@@ -41,88 +42,6 @@
 
             // Set unhandled exception event handler
             AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
-
-            // Create a DiscordClient object per Discord server in config
-            foreach (var (guildId, guildConfig) in _whConfig.Servers)
-            {
-                if (string.IsNullOrEmpty(guildConfig.Token))
-                {
-                    _logger.Error($"Bot token for guild {guildId} cannot be empty and must be set, skipping guild.");
-                    continue;
-                }
-
-                var client = new DiscordClient(new DiscordConfiguration
-                {
-                    AutoReconnect = true,
-                    AlwaysCacheMembers = true,
-                    // REVIEW: Hmm maybe we should compress the whole stream instead of just payload.
-                    GatewayCompressionLevel = GatewayCompressionLevel.Payload,
-                    Token = guildConfig?.Token,
-                    TokenType = TokenType.Bot,
-                    MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Debug, // TODO: _whConfig.LogLevel,
-                    Intents = DiscordIntents.DirectMessages
-                    | DiscordIntents.DirectMessageTyping
-                    | DiscordIntents.GuildEmojis
-                    | DiscordIntents.GuildMembers
-                    | DiscordIntents.GuildMessages
-                    | DiscordIntents.GuildMessageTyping
-                    | DiscordIntents.GuildPresences
-                    | DiscordIntents.Guilds
-                    | DiscordIntents.GuildWebhooks,
-                    ReconnectIndefinitely = true,
-                });
-
-                // If you are on Windows 7 and using .NETFX, install 
-                // DSharpPlus.WebSocket.WebSocket4Net from NuGet,
-                // add appropriate usings, and uncomment the following
-                // line
-                //client.SetWebSocketClient<WebSocket4NetClient>();
-
-                // If you are on Windows 7 and using .NET Core, install 
-                // DSharpPlus.WebSocket.WebSocket4NetCore from NuGet,
-                // add appropriate usings, and uncomment the following
-                // line
-                //client.SetWebSocketClient<WebSocket4NetCoreClient>();
-
-                // If you are using Mono, install 
-                // DSharpPlus.WebSocket.WebSocketSharp from NuGet,
-                // add appropriate usings, and uncomment the following
-                // line
-                //client.SetWebSocketClient<WebSocketSharpClient>();
-
-                client.Ready += Client_Ready;
-                client.GuildAvailable += Client_GuildAvailable;
-                //_client.MessageCreated += Client_MessageCreated;
-                client.ClientErrored += Client_ClientErrored;
-                //client.DebugLogger.LogMessageReceived += DebugLogger_LogMessageReceived;
-
-                _logger.Info($"Configured Discord server {guildId}");
-                if (!_servers.ContainsKey(guildId))
-                {
-                    _servers.Add(guildId, client);
-                }
-
-                // Wait 3 seconds between initializing Discord clients
-                Task.Delay(3000).GetAwaiter().GetResult();
-                // Start update timer
-                _timer.Start();
-            }
-        }
-
-        private async void OnTimerElapsed(object sender, ElapsedEventArgs e)
-        {
-            foreach (var server in _servers.Values)
-            {
-                foreach (var guild in server.Guilds.Values)
-                {
-                    if (!_whConfig.Servers.ContainsKey(guild.Id))
-                        continue;
-
-                    await UpdateGuildStats(guild);
-                    // Wait 5 seconds per guild
-                    System.Threading.Thread.Sleep(5000);
-                }
-            }
         }
 
         #endregion
@@ -136,21 +55,21 @@
         public async Task Start()
         {
             _logger.Trace("Start");
+
+            _logger.Info($"Initializing {_whConfig.Servers.Count:N0} Discord server clients...");
+            await Initialize();
+
             _logger.Info("Connecting to Discord...");
 
             // Loop through each Discord server and attempt initial connection
-            var keys = _servers.Keys.ToList();
-            for (var i = 0; i < keys.Count; i++)
+            foreach (var (guildId, guildClient) in _servers)
             {
-                var guildId = keys[i];
-                var client = _servers[guildId];
-
                 _logger.Info($"Attempting connection to Discord server {guildId}");
-                await client.ConnectAsync();
+                await guildClient.ConnectAsync();
                 await Task.Delay(1000);
             }
 
-            _logger.Info("GuildStats is running...");
+            _logger.Info($"{Strings.BotName} is running...");
         }
 
         /// <summary>
@@ -163,18 +82,14 @@
             _logger.Info("Disconnecting from Discord...");
 
             // Loop through each Discord server and terminate the connection
-            var keys = _servers.Keys.ToList();
-            for (var i = 0; i < keys.Count; i++)
+            foreach (var (guildId, guildClient) in _servers)
             {
-                var guildId = keys[i];
-                var client = _servers[guildId];
-
-                _logger.Info($"Attempting connection to Discord server {guildId}");
-                await client.DisconnectAsync();
+                _logger.Info($"Attempting to disconnect from Discord server {guildId}");
+                await guildClient.DisconnectAsync();
                 await Task.Delay(1000);
             }
 
-            _logger.Info("WebhookManager is stopped...");
+            _logger.Info($"{Strings.BotName} is stopped...");
         }
 
         #endregion
@@ -215,8 +130,6 @@
             var status = _whConfig.Servers[e.Guild.Id].Status;
             await client.UpdateStatusAsync(new DiscordActivity(status ?? $"v{Strings.Version}"), UserStatus.Online);
 
-            _logger.Debug($"Updating guild statistics for channels");
-
             await UpdateGuildStats(e.Guild);
         }
 
@@ -231,10 +144,72 @@
 
         #region Private Methods
 
+        private async Task Initialize()
+        {
+            var clientIntents = DiscordIntents.DirectMessages
+                | DiscordIntents.DirectMessageTyping
+                | DiscordIntents.GuildEmojis
+                | DiscordIntents.GuildMembers
+                | DiscordIntents.GuildMessages
+                | DiscordIntents.GuildMessageTyping
+                | DiscordIntents.GuildPresences
+                | DiscordIntents.Guilds
+                | DiscordIntents.GuildWebhooks;
+
+            // Create a DiscordClient object per Discord server in config
+            foreach (var (guildId, guildConfig) in _whConfig.Servers)
+            {
+                if (string.IsNullOrEmpty(guildConfig.Token))
+                {
+                    // Check if there's only one server configured
+                    if (_whConfig.Servers.Count == 1)
+                    {
+                        _logger.Error($"Bot token for guild {guildId} cannot be empty and must be set, existing application.");
+                        Environment.Exit(-1);
+                    }
+
+                    _logger.Error($"Bot token for guild {guildId} cannot be empty and must be set, skipping guild.");
+                    continue;
+                }
+
+                var client = new DiscordClient(new DiscordConfiguration
+                {
+                    AutoReconnect = true,
+                    AlwaysCacheMembers = true,
+                    // REVIEW: Hmm maybe we should compress the whole stream instead of just payload.
+                    GatewayCompressionLevel = GatewayCompressionLevel.Payload,
+                    Token = guildConfig?.Token,
+                    TokenType = TokenType.Bot,
+                    MinimumLogLevel = guildConfig.LogLevel,
+                    Intents = clientIntents,
+                    ReconnectIndefinitely = true,
+                });
+
+                client.Ready += Client_Ready;
+                client.GuildAvailable += Client_GuildAvailable;
+                //_client.MessageCreated += Client_MessageCreated;
+                client.ClientErrored += Client_ClientErrored;
+
+                _logger.Info($"Configured Discord server {guildId}");
+                if (!_servers.ContainsKey(guildId))
+                {
+                    _servers.Add(guildId, client);
+                }
+
+                // Wait 3 seconds between initializing Discord clients
+                await Task.Delay(3000);
+            }
+
+            // Start update timer
+            _timer.Start();
+        }
+
         private async Task UpdateGuildStats(DiscordGuild guild)
         {
             if (!_whConfig.Servers.ContainsKey(guild.Id))
                 return;
+
+            _logger.Debug($"Updating guild statistic channels for guild: {guild.Name} ({guild.Id})");
 
             var server = _whConfig.Servers[guild.Id];
 
@@ -262,15 +237,15 @@
                         continue;
                     }
                     total += GetMemberRoleCount(role.Id, guild.Members.Values.ToList());
-                    System.Threading.Thread.Sleep(500);
+                    Thread.Sleep(500);
                 }
 
                 await roleChannel.ModifyAsync(action => action.Name = $"{roleConfig.Text}: {total:N0}");
-                System.Threading.Thread.Sleep(500);
+                Thread.Sleep(500);
             }
 
             // Wait 2 seconds per guild
-            System.Threading.Thread.Sleep(2000);
+            Thread.Sleep(2000);
         }
 
         private static async Task UpdateChannelName(DiscordGuild guild, ulong channelId, string newName)
@@ -286,7 +261,7 @@
             await channel.ModifyAsync(action => action.Name = newName);
 
             // Wait half a second between updating channel names
-            System.Threading.Thread.Sleep(500);
+            Thread.Sleep(500);
         }
 
         private static int GetMemberRoleCount(ulong roleId, List<DiscordMember> members)
@@ -301,6 +276,22 @@
             {
                 _logger.Error(ex);
                 return 0;
+            }
+        }
+
+        private async void OnTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            // Loop all configured Discord server clients
+            foreach (var server in _servers.Values)
+            {
+                // Filter only guilds we have configured
+                var guilds = server.Guilds.Values.Where(guild => _whConfig.Servers.ContainsKey(guild.Id));
+                foreach (var guild in guilds)
+                {
+                    await UpdateGuildStats(guild);
+                    // Wait 5 seconds per guild
+                    Thread.Sleep(5000);
+                }
             }
         }
 

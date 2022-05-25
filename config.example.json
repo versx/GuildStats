@@ -1,5 +1,14 @@
 {
-    "logLevel": "Trace",
+    /*
+     * Trace: 0
+     * Debug: 1
+     * Info: 2
+     * Warning: 3
+     * Error: 4
+     * Critical: 5
+     * None: 6
+    */
+    "logLevel": 3,
     "updateIntervalM": 15,
     "servers": {
         "00000000000001": {
@@ -16,7 +25,17 @@
                 }
             },
             "token": "<DISCORD_BOT_TOKEN>",
-            "status": null
+            "status": null,
+            /*
+             * Trace: 0
+             * Debug: 1
+             * Info: 2
+             * Warning: 3
+             * Error: 4
+             * Critical: 5
+             * None: 6
+            */
+            "logLevel": 3,
         }
     }
 }

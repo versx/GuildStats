@@ -2,40 +2,47 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json.Serialization;
 
-    using Newtonsoft.Json;
+    using Microsoft.Extensions.Logging;
 
     public class DiscordGuildConfig
     {
-        [JsonProperty("ownerId")]
+        [JsonPropertyName("ownerId")]
         public ulong OwnerId { get; set; }
 
-        [JsonProperty("guildId")]
+        [JsonPropertyName("guildId")]
         public ulong GuildId { get; set; }
 
-        //[JsonProperty("categoryChannelId")]
+        //[JsonPropertyName("categoryChannelId")]
         //public ulong CategoryChannelId { get; set; }
 
-        [JsonProperty("memberCountChannelId")]
+        [JsonPropertyName("memberCountChannelId")]
         public ulong MemberCountChannelId { get; set; }
 
-        [JsonProperty("botCountChannelId")]
+        [JsonPropertyName("botCountChannelId")]
         public ulong BotCountChannelId { get; set; }
 
-        [JsonProperty("roleCountChannelId")]
+        [JsonPropertyName("roleCountChannelId")]
         public ulong RoleCountChannelId { get; set; }
 
-        [JsonProperty("channelCountChannelId")]
+        [JsonPropertyName("channelCountChannelId")]
         public ulong ChannelCountChannelId { get; set; }
 
-        [JsonProperty("memberRoles")]
+        [JsonPropertyName("memberRoles")]
         public Dictionary<ulong, MemberRoleConfig> MemberRoles { get; set; }
 
-        [JsonProperty("token")]
+        [JsonPropertyName("token")]
         public string Token { get; set; }
 
-        [JsonProperty("status")]
+        [JsonPropertyName("status")]
         public string Status { get; set; }
+
+        /// <summary>
+        /// Gets or sets the event logging level to set for the Discord Guild.
+        /// </summary>
+        [JsonPropertyName("logLevel")]
+        public LogLevel LogLevel { get; set; }
 
         public DiscordGuildConfig()
         {
@@ -45,10 +52,10 @@
 
     public class MemberRoleConfig
     {
-        [JsonProperty("roleIds")]
+        [JsonPropertyName("roleIds")]
         public List<ulong> RoleIds { get; set; }
 
-        [JsonProperty("text")]
+        [JsonPropertyName("text")]
         public string Text { get; set; }
 
         public MemberRoleConfig()

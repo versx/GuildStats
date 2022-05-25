@@ -3,8 +3,8 @@
     using System;
     using System.Collections.Generic;
     using System.IO;
-
-    using Newtonsoft.Json;
+    using System.Text.Json;
+    using System.Text.Json.Serialization;
 
     using GuildStats.Diagnostics;
 
@@ -18,19 +18,19 @@
         /// <summary>
         /// Gets or sets the Discord servers configuration
         /// </summary>
-        [JsonProperty("servers")]
+        [JsonPropertyName("servers")]
         public Dictionary<ulong, DiscordGuildConfig> Servers { get; set; }
 
         /// <summary>
         /// Gets or sets the interval of how frequent to update the guild stats
         /// </summary>
-        [JsonProperty("updateIntervalM")]
+        [JsonPropertyName("updateIntervalM")]
         public int UpdateIntervalM { get; set; }
 
         /// <summary>
         /// Gets or sets the event logging level to set
         /// </summary>
-        [JsonProperty("logLevel")]
+        [JsonPropertyName("logLevel")]
         public LogLevel LogLevel { get; set; }
 
         /// <summary>
@@ -55,8 +55,14 @@
         /// <param name="filePath">Path to save the configuration file</param>
         public void Save(string filePath)
         {
-            var data = JsonConvert.SerializeObject(this, Formatting.Indented);
-            File.WriteAllText(filePath, data);
+            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
+            {
+                AllowTrailingCommas = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                WriteIndented = true,
+            });
+            File.WriteAllText(filePath, json);
         }
 
         /// <summary>
@@ -82,14 +88,15 @@
                 throw new FileNotFoundException($"{filePath} file not found.", filePath);
             }
 
-            var data = File.ReadAllText(filePath);
-            if (string.IsNullOrEmpty(data))
+            var json = File.ReadAllText(filePath);
+            if (string.IsNullOrEmpty(json))
             {
                 _logger.Error($"{filePath} database is empty.");
                 return default;
             }
 
-            return (T)JsonConvert.DeserializeObject(data, typeof(T));
+            var obj = JsonSerializer.Deserialize<T>(json);
+            return obj;
         }
     }
 }
