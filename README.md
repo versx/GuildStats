@@ -1,3 +1,4 @@
+[![Build](https://github.com/versx/GuildStats/workflows/.NET%205.0/badge.svg)](https://github.com/versx/GuildStats/actions)
 [![GitHub Release](https://img.shields.io/github/release/versx/GuildStats.svg)](https://github.com/versx/GuildStats/releases/)
 [![GitHub Contributors](https://img.shields.io/github/contributors/versx/GuildStats.svg)](https://github.com/versx/GuildStats/graphs/contributors/)
 [![Discord](https://img.shields.io/discord/552003258000998401.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/zZ9h9Xa)  
