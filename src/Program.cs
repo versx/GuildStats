@@ -24,17 +24,17 @@
         {
             var configPath = Path.Combine(Environment.CurrentDirectory, Strings.ConfigFileName);
             var logger = Diagnostics.EventLogger.GetLogger(ManagerName);
-            var whConfig = Configuration.Config.Load(configPath);
-            if (whConfig == null)
+            var config = Configuration.Config.Load(configPath);
+            if (config == null)
             {
                 logger.Error($"Failed to load config {configPath}.");
                 return;
             }
-            whConfig.FileName = configPath;
+            config.FileName = configPath;
 
             // Start bot
-            var bot = new Bot(whConfig);
-            await bot.Start();
+            var bot = new Bot(config);
+            await bot.StartAsync();
 
             // Keep the process alive
             Process.GetCurrentProcess().WaitForExit();

@@ -19,7 +19,7 @@
         #region Variables
 
         private readonly Dictionary<ulong, DiscordClient> _servers;
-        private readonly Config _whConfig;
+        private readonly Config _config;
         private readonly Timer _timer;
 
         private static readonly IEventLogger _logger = EventLogger.GetLogger("BOT");
@@ -32,16 +32,17 @@
         /// Discord bot class
         /// </summary>
         /// <param name="config">Configuration settings</param>
-        public Bot(Config whConfig)
+        public Bot(Config config)
         {
-            _logger.Trace($"WhConfig [Servers={whConfig.Servers.Count}]");
+            _logger.Trace($"Config [Servers={config.Servers.Count}]");
+
             _servers = new Dictionary<ulong, DiscordClient>();
-            _whConfig = whConfig;
-            _timer = new Timer { Interval = 60 * 1000 * _whConfig.UpdateIntervalM };
-            _timer.Elapsed += OnTimerElapsed;
+            _config = config;
+            _timer = new Timer { Interval = 60 * 1000 * _config.UpdateIntervalM };
+            _timer.Elapsed += async (sender, e) => await OnTimerElapsedAsync();
 
             // Set unhandled exception event handler
-            AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
+            AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandlerAsync;
         }
 
         #endregion
@@ -52,12 +53,12 @@
         /// Start the Discord bot(s)
         /// </summary>
         /// <returns></returns>
-        public async Task Start()
+        public async Task StartAsync()
         {
             _logger.Trace("Start");
 
-            _logger.Info($"Initializing {_whConfig.Servers.Count:N0} Discord server clients...");
-            await Initialize();
+            _logger.Info($"Initializing {_config.Servers.Count:N0} Discord server clients...");
+            await InitializeAsync();
 
             _logger.Info("Connecting to Discord...");
 
@@ -69,6 +70,9 @@
                 await Task.Delay(1000);
             }
 
+            // Start update timer
+            _timer.Start();
+
             _logger.Info($"{Strings.BotName} is running...");
         }
 
@@ -76,7 +80,7 @@
         /// Stop the Discord bot(s)
         /// </summary>
         /// <returns></returns>
-        public async Task Stop()
+        public async Task StopAsync()
         {
             _logger.Trace("Stop");
             _logger.Info("Disconnecting from Discord...");
@@ -88,6 +92,9 @@
                 await guildClient.DisconnectAsync();
                 await Task.Delay(1000);
             }
+
+            // Stop update timer
+            _timer.Stop();
 
             _logger.Info($"{Strings.BotName} is stopped...");
         }
@@ -117,7 +124,7 @@
         private async Task Client_GuildAvailable(DiscordClient sender, GuildCreateEventArgs e)
         {
             // If guild is in configured servers list then attempt to create emojis needed
-            if (!_whConfig.Servers.ContainsKey(e.Guild.Id))
+            if (!_config.Servers.ContainsKey(e.Guild.Id))
                 return;
 
             if (sender is not DiscordClient client)
@@ -127,10 +134,10 @@
             }
 
             // Set custom bot status if guild is in config server list
-            var status = _whConfig.Servers[e.Guild.Id].Status;
+            var status = _config.Servers[e.Guild.Id].Status;
             await client.UpdateStatusAsync(new DiscordActivity(status ?? $"v{Strings.Version}"), UserStatus.Online);
 
-            await UpdateGuildStats(e.Guild);
+            await UpdateGuildStatsAsync(e.Guild);
         }
 
         private async Task Client_ClientErrored(DiscordClient sender, ClientErrorEventArgs e)
@@ -144,7 +151,7 @@
 
         #region Private Methods
 
-        private async Task Initialize()
+        private async Task InitializeAsync()
         {
             var clientIntents = DiscordIntents.DirectMessages
                 | DiscordIntents.DirectMessageTyping
@@ -157,12 +164,12 @@
                 | DiscordIntents.GuildWebhooks;
 
             // Create a DiscordClient object per Discord server in config
-            foreach (var (guildId, guildConfig) in _whConfig.Servers)
+            foreach (var (guildId, guildConfig) in _config.Servers)
             {
                 if (string.IsNullOrEmpty(guildConfig.Token))
                 {
                     // Check if there's only one server configured
-                    if (_whConfig.Servers.Count == 1)
+                    if (_config.Servers.Count == 1)
                     {
                         _logger.Error($"Bot token for guild {guildId} cannot be empty and must be set, existing application.");
                         Environment.Exit(-1);
@@ -199,24 +206,21 @@
                 // Wait 3 seconds between initializing Discord clients
                 await Task.Delay(3000);
             }
-
-            // Start update timer
-            _timer.Start();
         }
 
-        private async Task UpdateGuildStats(DiscordGuild guild)
+        private async Task UpdateGuildStatsAsync(DiscordGuild guild)
         {
-            if (!_whConfig.Servers.ContainsKey(guild.Id))
+            if (!_config.Servers.ContainsKey(guild.Id))
                 return;
 
             _logger.Debug($"Updating guild statistic channels for guild: {guild.Name} ({guild.Id})");
 
-            var server = _whConfig.Servers[guild.Id];
+            var server = _config.Servers[guild.Id];
 
-            await UpdateChannelName(guild, server.MemberCountChannelId, $"Member Count: {guild.MemberCount:N0}");
-            await UpdateChannelName(guild, server.BotCountChannelId, $"Bot Count: {guild.Members.Where(x => x.Value.IsBot).ToList().Count:N0}");
-            await UpdateChannelName(guild, server.RoleCountChannelId, $"Role Count: {guild.Roles.Count:N0}");
-            await UpdateChannelName(guild, server.ChannelCountChannelId, $"Channel Count: {guild.Channels.Count:N0}");
+            await UpdateChannelNameAsync(guild, server.MemberCountChannelId, $"Member Count: {guild.MemberCount:N0}");
+            await UpdateChannelNameAsync(guild, server.BotCountChannelId, $"Bot Count: {guild.Members.Where(x => x.Value.IsBot).ToList().Count:N0}");
+            await UpdateChannelNameAsync(guild, server.RoleCountChannelId, $"Role Count: {guild.Roles.Count:N0}");
+            await UpdateChannelNameAsync(guild, server.ChannelCountChannelId, $"Channel Count: {guild.Channels.Count:N0}");
 
             foreach (var (roleChannelId, roleConfig) in server.MemberRoles)
             {
@@ -248,7 +252,7 @@
             Thread.Sleep(2000);
         }
 
-        private static async Task UpdateChannelName(DiscordGuild guild, ulong channelId, string newName)
+        private static async Task UpdateChannelNameAsync(DiscordGuild guild, ulong channelId, string newName)
         {
             var channel = guild.GetChannel(channelId);
             if (channel == null)
@@ -257,7 +261,7 @@
                 return;
             }
 
-            _logger.Debug($"Updating channel: {channelId}");
+            _logger.Debug($"Updating channel: {channelId} '{channel.Name}'=>''{newName}");
             await channel.ModifyAsync(action => action.Name = newName);
 
             // Wait half a second between updating channel names
@@ -279,23 +283,23 @@
             }
         }
 
-        private async void OnTimerElapsed(object sender, ElapsedEventArgs e)
+        private async Task OnTimerElapsedAsync()
         {
             // Loop all configured Discord server clients
-            foreach (var server in _servers.Values)
+            foreach (var (_, guildClient) in _servers)
             {
                 // Filter only guilds we have configured
-                var guilds = server.Guilds.Values.Where(guild => _whConfig.Servers.ContainsKey(guild.Id));
+                var guilds = guildClient.Guilds.Values.Where(guild => _config.Servers.ContainsKey(guild.Id));
                 foreach (var guild in guilds)
                 {
-                    await UpdateGuildStats(guild);
+                    await UpdateGuildStatsAsync(guild);
                     // Wait 5 seconds per guild
                     Thread.Sleep(5000);
                 }
             }
         }
 
-        private async void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
+        private async void UnhandledExceptionHandlerAsync(object sender, UnhandledExceptionEventArgs e)
         {
             _logger.Debug("Unhandled exception caught.");
             _logger.Error((Exception)e.ExceptionObject);
@@ -303,9 +307,9 @@
             if (!e.IsTerminating)
                 return;
 
-            foreach (var (guildId, guildConfig) in _whConfig.Servers)
+            foreach (var (guildId, guildConfig) in _config.Servers)
             {
-                if (!_whConfig.Servers.ContainsKey(guildId))
+                if (!_config.Servers.ContainsKey(guildId))
                 {
                     _logger.Error($"Unable to find guild id {guildId} in server config list.");
                     continue;
