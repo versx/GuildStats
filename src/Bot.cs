@@ -16,6 +16,9 @@
 
     public class Bot
     {
+        private const int UpdateGuildStatisticsIntervalS = 5; // 5 seconds
+        private const int DelayUpdateBetweenGuildsS = 2; // 2 seconds
+
         #region Variables
 
         private readonly Dictionary<ulong, DiscordClient> _servers;
@@ -57,10 +60,7 @@
         {
             _logger.Trace("Start");
 
-            _logger.Info($"Initializing {_config.Servers.Count:N0} Discord server clients...");
             await InitializeAsync();
-
-            _logger.Info("Connecting to Discord...");
 
             // Loop through each Discord server and attempt initial connection
             foreach (var (guildId, guildClient) in _servers)
@@ -83,7 +83,6 @@
         public async Task StopAsync()
         {
             _logger.Trace("Stop");
-            _logger.Info("Disconnecting from Discord...");
 
             // Loop through each Discord server and terminate the connection
             foreach (var (guildId, guildClient) in _servers)
@@ -153,6 +152,8 @@
 
         private async Task InitializeAsync()
         {
+            _logger.Info($"Initializing {_config.Servers.Count:N0} Discord server clients...");
+
             var clientIntents = DiscordIntents.DirectMessages
                 | DiscordIntents.DirectMessageTyping
                 | DiscordIntents.GuildEmojis
@@ -222,6 +223,10 @@
             await UpdateChannelNameAsync(guild, server.RoleCountChannelId, $"Role Count: {guild.Roles.Count:N0}");
             await UpdateChannelNameAsync(guild, server.ChannelCountChannelId, $"Channel Count: {guild.Channels.Count:N0}");
 
+            if (!(server.MemberRoles?.Any() ?? false))
+                return;
+
+            // Post individual role counts
             foreach (var (roleChannelId, roleConfig) in server.MemberRoles)
             {
                 var roleChannel = guild.GetChannel(roleChannelId);
@@ -249,7 +254,7 @@
             }
 
             // Wait 2 seconds per guild
-            Thread.Sleep(2000);
+            Thread.Sleep(DelayUpdateBetweenGuildsS * 1000);
         }
 
         private static async Task UpdateChannelNameAsync(DiscordGuild guild, ulong channelId, string newName)
@@ -261,7 +266,7 @@
                 return;
             }
 
-            _logger.Debug($"Updating channel: {channelId} '{channel.Name}'=>''{newName}");
+            _logger.Debug($"Updating channel name: {channelId} '{channel.Name}'=>''{newName}");
             await channel.ModifyAsync(action => action.Name = newName);
 
             // Wait half a second between updating channel names
@@ -279,8 +284,8 @@
             catch (Exception ex)
             {
                 _logger.Error(ex);
-                return 0;
             }
+            return 0;
         }
 
         private async Task OnTimerElapsedAsync()
@@ -294,7 +299,7 @@
                 {
                     await UpdateGuildStatsAsync(guild);
                     // Wait 5 seconds per guild
-                    Thread.Sleep(5000);
+                    Thread.Sleep(UpdateGuildStatisticsIntervalS * 1000);
                 }
             }
         }
@@ -309,17 +314,12 @@
 
             foreach (var (guildId, guildConfig) in _config.Servers)
             {
-                if (!_config.Servers.ContainsKey(guildId))
-                {
-                    _logger.Error($"Unable to find guild id {guildId} in server config list.");
-                    continue;
-                }
-
                 if (!_servers.ContainsKey(guildId))
                 {
                     _logger.Error($"Unable to find guild id {guildId} in Discord server client list.");
                     continue;
                 }
+
                 var client = _servers[guildId];
                 if (client == null)
                     continue;
@@ -329,8 +329,8 @@
                     _logger.Error($"Unable to find guild id {guildId} in Discord client guilds list that should have it.");
                     continue;
                 }
-                var guild = client.Guilds[guildId];
 
+                var guild = client.Guilds[guildId];
                 var owner = await guild.GetMemberAsync(guildConfig.OwnerId);
                 if (owner == null)
                 {

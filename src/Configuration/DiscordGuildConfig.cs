@@ -1,6 +1,5 @@
 ﻿namespace GuildStats.Configuration
 {
-    using System;
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
 
@@ -30,7 +29,7 @@
         public ulong ChannelCountChannelId { get; set; }
 
         [JsonPropertyName("memberRoles")]
-        public Dictionary<ulong, MemberRoleConfig> MemberRoles { get; set; }
+        public IReadOnlyDictionary<ulong, MemberRoleConfig> MemberRoles { get; set; }
 
         [JsonPropertyName("token")]
         public string Token { get; set; }
@@ -53,7 +52,7 @@
     public class MemberRoleConfig
     {
         [JsonPropertyName("roleIds")]
-        public List<ulong> RoleIds { get; set; }
+        public IReadOnlyList<ulong> RoleIds { get; set; }
 
         [JsonPropertyName("text")]
         public string Text { get; set; }
