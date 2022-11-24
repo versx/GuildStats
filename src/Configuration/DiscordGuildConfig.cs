@@ -13,9 +13,6 @@
         [JsonPropertyName("guildId")]
         public ulong GuildId { get; set; }
 
-        //[JsonPropertyName("categoryChannelId")]
-        //public ulong CategoryChannelId { get; set; }
-
         [JsonPropertyName("memberCountChannelId")]
         public ulong MemberCountChannelId { get; set; }
 
@@ -46,6 +43,7 @@
         public DiscordGuildConfig()
         {
             MemberRoles = new Dictionary<ulong, MemberRoleConfig>();
+            LogLevel = LogLevel.Warning;
         }
     }
 
