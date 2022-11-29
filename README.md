@@ -8,9 +8,9 @@
 Displays Discord server statistics for members, bots, roles, and channel count. Supports multiple Discord servers.  
 
 ## Prerequisites
-1. Download .NET 5.0 installer: `curl https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh > dotnet-install.sh`  
+1. Download .NET 6.0 installer: `curl https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh > dotnet-install.sh`  
 1. Set executable permissions: `chmod +x dotnet-install.sh`  
-1. Start .NET 5.0 installer: `./dotnet-install.sh --version 5.0.404`  
+1. Start .NET 6.0 installer: `./dotnet-install.sh --version 6.0.403`  
 
 ## Installation
 1. Clone repository: `git clone https://github.com/versx/GuildStats`  
