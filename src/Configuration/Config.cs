@@ -1,6 +1,5 @@
 ﻿namespace GuildStats.Configuration
 {
-    using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Text.Json;
@@ -19,7 +18,7 @@
         /// Gets or sets the Discord servers configuration
         /// </summary>
         [JsonPropertyName("servers")]
-        public Dictionary<ulong, DiscordGuildConfig> Servers { get; set; }
+        public IReadOnlyDictionary<ulong, DiscordGuildConfig> Servers { get; set; }
 
         /// <summary>
         /// Gets or sets the interval of how frequent to update the guild stats
@@ -91,7 +90,7 @@
             var json = File.ReadAllText(filePath);
             if (string.IsNullOrEmpty(json))
             {
-                _logger.Error($"{filePath} database is empty.");
+                _logger.Error($"{filePath} file is empty.");
                 return default;
             }
 
