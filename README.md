@@ -3,6 +3,8 @@
 [![GitHub Contributors](https://img.shields.io/github/contributors/versx/GuildStats.svg)](https://github.com/versx/GuildStats/graphs/contributors/)
 [![Discord](https://img.shields.io/discord/552003258000998401.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/zZ9h9Xa)  
 
+# This project is outdated, please refer to the updated [DiscordGuildStats](https://github.com/versx/DiscordGuildStats) project.  
+
 # Discord Guild Statistics Bot  
 
 Displays Discord server statistics for members, bots, roles, and channel count. Supports multiple Discord servers.  
